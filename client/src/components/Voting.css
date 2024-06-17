@@ -1,0 +1,28 @@
+
+.voting-container {
+    padding: 20px;
+}
+
+.card-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.card {
+    flex: 1 1 20%; 
+    max-width: 140px; 
+}
+
+
+@media (max-width: 768px) {
+    .card {
+        flex: 1 1 45%; 
+    }
+}
+
+@media (max-width: 480px) {
+    .card {
+        flex: 1 1 90%;
+    }
+}
