@@ -1,8 +1,13 @@
-import { useState } from "react"
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import io from 'socket.io-client';
 
-function Sessions() {
+const socket = io.connect('http://localhost:4000');
+
+const Sessions = () => {
+    const navigate = useNavigate();
     const [formData, setFormData] = useState({ sessionname: '', username: '', series: 'fibonacci' });
-    const [error,setError] = useState("no");
+
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData((prevData) => ({ ...prevData, [name]: value }));
@@ -18,31 +23,25 @@ function Sessions() {
             },
             body: JSON.stringify(formData),
         });
+
         if (response.redirected) {
-            window.location.href = response.url;
+            const sessionIdFromResponse = response.url.split('/').pop();
+            navigate(`/voting/${sessionIdFromResponse}`, { state: { username: formData.username } });
+            socket.emit("join_session", { sessionid: sessionIdFromResponse, username: formData.username });
         } else {
-            setError("yes");
+            console.error('Failed to create the session.');
         }
     };
 
     return (
         <form onSubmit={submitForm}>
-            <label for='sessionname'>Sessions Name</label>
-            <input type="text" name='sessionname' value={formData.sessionname} onChange={handleChange}></input>
-            <label for='username'>Your name</label>
-            <input type="text" name="username" value={formData.username} onChange={handleChange}></input>
-            <div>
-                <label>
-                    <input type="radio" name="series" value="fibonacci" onChange={handleChange} checked={formData.series === 'fibonacci'} />
-                    Fibonacci series
-                </label>
-                <label>
-                    <input type="radio" name="series" value="custom" onChange={handleChange} checked={formData.series === 'custom'} />
-                    Custom
-                </label>
-            </div>
-            <button type="submit">Create Session</button>
+            <label htmlFor='sessionname'>Session Name</label>
+            <input type='text' name='sessionname' value={formData.sessionname} onChange={handleChange} />
+            <label htmlFor='username'>Your name</label>
+            <input type='text' name='username' value={formData.username} onChange={handleChange} />
+            <button type='submit'>Create Session</button>
         </form>
-    )
-}
+    );
+};
+
 export default Sessions;

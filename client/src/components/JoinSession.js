@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
-import { Navigate } from "react-router-dom";
 
 const socket = io.connect('http://localhost:4000');
 
-function JoinSession(){
+const JoinSession = () => {
+    const navigate = useNavigate();
     const [formData, setFormData] = useState({ sessionid: '', username: '' });
-    const [error,setError] = useState("no");
+
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData((prevData) => ({ ...prevData, [name]: value }));
@@ -24,20 +25,23 @@ function JoinSession(){
         });
 
         if (response.redirected) {
-            socket.emit("join_session", { sessionid: formData.sessionid });
-            window.location.href = response.url;
+            const sessionIdFromResponse = response.url.split('/').pop();
+            navigate(`/voting/${sessionIdFromResponse}`, { state: { username: formData.username } });
+            socket.emit("join_session", { sessionid: sessionIdFromResponse, username: formData.username });
         } else {
-            setError("yes");
+            console.error('Failed to join the session.');
         }
     };
+
     return (
         <form onSubmit={submitForm}>
-            <label for='sessionid'>Sessions Id</label>
-            <input type="text" name='sessionid' value={formData.sessionid} onChange={handleChange}></input>
-            <label for='username'>Your name</label>
-            <input type="text" name="username" value={formData.username} onChange={handleChange}></input>
-            <button type="submit">Create Session</button>
+            <label htmlFor='sessionid'>Session Id</label>
+            <input type='text' name='sessionid' value={formData.sessionid} onChange={handleChange} />
+            <label htmlFor='username'>Your name</label>
+            <input type='text' name='username' value={formData.username} onChange={handleChange} />
+            <button type='submit'>Join Session</button>
         </form>
-    )
-}
+    );
+};
+
 export default JoinSession;

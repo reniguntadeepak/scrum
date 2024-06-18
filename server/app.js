@@ -6,52 +6,77 @@ const path = require('path');
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 const app = express();
-const { v4: uuidv4, v4 } = require('uuid');
+const { v4: uuidv4 } = require('uuid');
 const store = new session.MemoryStore();
 const bcrypt = require('bcrypt');
-const { off } = require('process');
 require('dotenv').config();
 const pool = require('./db');
 const http = require('http');
 const server = http.createServer(app);
 const { Server } = require('socket.io');
 
-
 const io = new Server(server, {
     cors: {
         origin: "http://localhost:3000",
-        methods: ['GET', "POST"]
+        methods: ['GET', 'POST']
     }
 });
 
 io.on("connection", (socket) => {
-    // console.log(`connected ${socket.id}`);
-    socket.on("join_session", async ({ sessionid }) => {
+    socket.on("join_session", async ({ sessionid, username }) => {
+        console.log(`User joined session: ${sessionid}, Username: ${username}`);
         const query = 'SELECT * FROM voting WHERE session_id = $1;';
         try {
             const result = await pool.query(query, [sessionid]);
-            // console.log(`joined session websocket activated`);
-            // console.log(result.rows);
 
             socket.join(sessionid);
-
-            socket.emit("voters", result.rows);
-
-            socket.to(sessionid).emit("voters", result.rows);
+            io.in(sessionid).emit("voters", result.rows);
         } catch (err) {
             console.error(err);
         }
     });
 
-    // socket.on("disconnect", () => {
-    //     console.log(`disconnected ${socket.id}`);
-    // });
+    socket.on("submit_vote", async ({ sessionid, username, vote }) => {
+        console.log(`Vote received: SessionID: ${sessionid}, Username: ${username}, Vote: ${vote}`);
+        const query = 'UPDATE voting SET vote = $1 WHERE session_id = $2 AND user_name = $3 RETURNING *;';
+        const values = [vote, sessionid, username];
+        try {
+            const result = await pool.query(query, values);
+            if (result.rowCount === 1) {
+                const updatedResult = await pool.query('SELECT * FROM voting WHERE session_id = $1;', [sessionid]);
+                io.in(sessionid).emit("voters", updatedResult.rows);
+            } else {
+                console.log(`Vote update failed: ${username} in session ${sessionid}`);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    });
+
+    socket.on("toggle_votes_visibility", async ({ sessionid }) => {
+        console.log(`Toggle vote visibility for session: ${sessionid}`);
+        const query = 'UPDATE sessions SET votes_visible = NOT votes_visible WHERE id = $1 RETURNING votes_visible;';
+        try {
+            const result = await pool.query(query, [sessionid]);
+            if (result.rowCount === 1) {
+                io.in(sessionid).emit("toggle_votes", result.rows[0].votes_visible);
+            } else {
+                console.log(`Failed to toggle vote visibility for session: ${sessionid}`);
+            }
+        } catch (err) {
+            console.error('Error toggling vote visibility:', err);
+        }
+    });
+
+    socket.on("disconnect", () => {
+        console.log("Client disconnected");
+    });
 });
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cors({
-    origin: 'http://localhost:4000',
+    origin: 'http://localhost:3000',
     credentials: true
 }));
 
@@ -65,6 +90,27 @@ app.use(session({
 
 app.use(passport.initialize());
 app.use(passport.session());
+// Add this route in app.js
+
+app.post('/toggle_votes_visibility', async (req, res) => {
+    const { sessionid } = req.body;
+    console.log(`Toggling vote visibility for session: ${sessionid}`);
+    const query = 'UPDATE sessions SET votes_visible = NOT votes_visible WHERE id = $1 RETURNING votes_visible;';
+    try {
+        const result = await pool.query(query, [sessionid]);
+        if (result.rowCount === 1) {
+            const votesVisible = result.rows[0].votes_visible;
+            io.in(sessionid).emit("toggle_votes", votesVisible);
+            return res.json({ votesVisible });
+        } else {
+            console.log(`Failed to toggle vote visibility for session: ${sessionid}`);
+            return res.status(404).send('Session not found.');
+        }
+    } catch (err) {
+        console.error('Error toggling vote visibility:', err);
+        return res.status(500).send('Error');
+    }
+});
 
 passport.use(new LocalStrategy((username, password, done) => {
     const query = 'SELECT * FROM users WHERE username = $1';
@@ -102,14 +148,6 @@ passport.deserializeUser(async (id, done) => {
     }
 });
 
-// app.use((req, res, next) => {
-//     if (req.isAuthenticated() || req.path === '/loginpage' || req.path === '/signinpage' || req.path === '/login' || req.path === '/signin') {
-//         next();
-//     } else {
-//         res.send('/loginpage');
-//     }
-// })
-
 app.get('/public/*', (req, res) => {
     const filePath = path.join(__dirname, req.path);
     res.sendFile(filePath);
@@ -135,7 +173,7 @@ app.post("/signin", async (req, res) => {
         res.redirect("/loginpage");
     } catch (err) {
         console.error('Error querying the database:', err);
-        res.status(500).send('Try using diffrent username, password, email');
+        res.status(500).send('Try using a different username, password, or email');
     }
 });
 
@@ -157,10 +195,11 @@ app.get('/api/check-auth', (req, res) => {
 app.post('/session', async (req, res) => {
     const { sessionname, username } = req.body;
     const id = uuidv4();
-    const query1 = 'INSERT INTO sessions (id, session_name, user_name, status, date) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)';
-    const values1 = [id, sessionname, username, "active"];
-    const query2 = 'INSERT INTO voting (session_id, user_name) VALUES ($1, $2);';
-    const values2 = [id, username];
+    const query1 = 'INSERT INTO sessions (id, session_name, user_name, status, date, votes_visible) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5)';
+    const values1 = [id, sessionname, username, "active", true]; // Assuming the session creator is the moderator
+    const query2 = 'INSERT INTO voting (session_id, user_name, is_moderator) VALUES ($1, $2, $3);';
+    const values2 = [id, username, true]; // By default, votes are hidden when joining
+
     try {
         const result1 = await pool.query(query1, values1);
         if (result1.rowCount === 1) {
@@ -204,19 +243,6 @@ app.post('/joinsession', async (req, res) => {
     }
 });
 
-app.get('/voters', async (req, res) => {
-    const query = 'select * from voting;';
-    try {
-        const result = await pool.query(query);
-        return res.json(result.rows);
-    } catch (err) {
-        console.error(err);
-        return res.status(500).send("Error");
-    }
-})
-
-const port = process.env.PORT || 4000;
-
-server.listen(port, () => {
-    console.log(`Server up on port ${port}`);
+server.listen(process.env.PORT || 4000, () => {
+    console.log(`Server up on port ${process.env.PORT || 4000}`);
 });

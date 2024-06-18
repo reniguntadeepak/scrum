@@ -1,28 +1,85 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+  }
 
-.voting-container {
-    padding: 20px;
-}
-
-.card-row {
+  
+  .container {
+    padding: 2rem;
+  }
+  
+  .part1 {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-}
-
-.card {
-    flex: 1 1 20%; 
-    max-width: 140px; 
-}
-
-
-@media (max-width: 768px) {
-    .card {
-        flex: 1 1 45%; 
-    }
-}
-
-@media (max-width: 480px) {
-    .card {
-        flex: 1 1 90%;
-    }
-}
+    justify-content: space-between;
+  }
+  
+  .Section-1, .Section-2 {
+    flex: 1;
+    margin: 1rem;
+  }
+  
+  .Section-1 .row {
+    margin-bottom: 1rem;
+  }
+  
+  .cards {
+    text-align: center;
+    transition: transform 0.3s, box-shadow 0.3s;
+    position: relative;
+    cursor: pointer;
+    margin-bottom: 16px; /* Add gap between rows */
+  margin-right: 16px;
+  }
+  
+  .cards:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  .cards.selected {
+    border: 2px solid #1890ff;
+    box-shadow: 0 0 10px rgba(24, 144, 255, 0.5);
+  }
+  
+  .Section-2 {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+  
+  .Section-2 .ant-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    height: 100%;
+  }
+  
+  .Section-2 .ant-card-head {
+    text-align: center;
+  }
+  
+  .Section-2 .ant-card-head-title {
+    width: 100%;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+  }
+  
+  .Section-2 .ant-card-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 1rem;
+  }
+  
+  .Section-2 .ant-select {
+    margin-bottom: 1rem;
+  }
+  
+  .Section-2 .ant-btn {
+    align-self: center;
+    width: 100%;
+    max-width: 200px;
+  }
+  
